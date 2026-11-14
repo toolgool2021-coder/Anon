@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
  match /databases/{database}/documents {
   function signed() { return request.auth != null; }
-  function admin() { return signed() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
+  function verified() { return signed() && request.auth.token.email_verified == true; }\n  function admin() { return signed() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
   match /admins/{uid} { allow read: if signed() && request.auth.uid == uid; allow write: if false; }
   match /usernames/{name} {
    allow get: if signed(); allow list: if false;
@@ -10,15 +10,15 @@ service cloud.firestore {
    allow update, delete: if false;
   }
   match /questions/{qid} {
-   allow create: if signed() && request.resource.data.keys().hasOnly(['text','publicRequested','status','createdAt','answer','answeredAt','published']) && request.resource.data.text is string && request.resource.data.text.size() >= 3 && request.resource.data.text.size() <= 800 && request.resource.data.publicRequested is bool && request.resource.data.status == 'sent' && request.resource.data.answer == '' && request.resource.data.published == false && request.resource.data.createdAt == request.time && request.resource.data.answeredAt == null && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/history/$(qid)).data.questionId == qid && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/history/$(qid)).data.text == request.resource.data.text;
+   allow create: if verified() && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/limits/question).data.lastSentAt == request.time && request.resource.data.keys().hasOnly(['text','publicRequested','status','createdAt','answer','answeredAt','published']) && request.resource.data.text is string && request.resource.data.text.size() >= 3 && request.resource.data.text.size() <= 800 && request.resource.data.publicRequested is bool && request.resource.data.status == 'sent' && request.resource.data.answer == '' && request.resource.data.published == false && request.resource.data.createdAt == request.time && request.resource.data.answeredAt == null && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/history/$(qid)).data.questionId == qid && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/history/$(qid)).data.text == request.resource.data.text;
    allow get: if admin() || (signed() && exists(/databases/$(database)/documents/users/$(request.auth.uid)/history/$(qid))) || resource.data.published == true;
    allow list: if admin() || resource.data.published == true;
    allow update: if admin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','answer','answeredAt','published']) && request.resource.data.status in ['sent','read','answered'] && request.resource.data.answer is string && request.resource.data.answer.size() <= 2000 && (!request.resource.data.published || (resource.data.publicRequested && request.resource.data.status == 'answered' && request.resource.data.answer.size() > 0));
    allow delete: if admin();
   }
-  match /users/{uid}/history/{qid} {
+  match /users/{uid}/limits/{kind} {\n   allow get: if signed() && request.auth.uid == uid && kind == 'question';\n   allow list: if false;\n   allow create, update: if verified() && request.auth.uid == uid && kind == 'question' && request.resource.data.keys().hasOnly(['lastSentAt']) && request.resource.data.lastSentAt == request.time && (!exists(/databases/$(database)/documents/users/$(uid)/limits/$(kind)) || resource.data.lastSentAt + duration.value(3, 'h') <= request.time);\n   allow delete: if false;\n  }\n  match /users/{uid}/history/{qid} {
    allow read: if signed() && request.auth.uid == uid;
-   allow create: if signed() && request.auth.uid == uid && request.resource.data.keys().hasOnly(['questionId','text','publicRequested','createdAt']) && request.resource.data.questionId == qid && request.resource.data.text is string && request.resource.data.text.size() >= 3 && request.resource.data.text.size() <= 800 && request.resource.data.publicRequested is bool && request.resource.data.createdAt == request.time && !exists(/databases/$(database)/documents/questions/$(qid)) && getAfter(/databases/$(database)/documents/questions/$(qid)).data.text == request.resource.data.text && getAfter(/databases/$(database)/documents/questions/$(qid)).data.publicRequested == request.resource.data.publicRequested;
+   allow create: if verified() && request.auth.uid == uid && getAfter(/databases/$(database)/documents/users/$(uid)/limits/question).data.lastSentAt == request.time && request.resource.data.keys().hasOnly(['questionId','text','publicRequested','createdAt']) && request.resource.data.questionId == qid && request.resource.data.text is string && request.resource.data.text.size() >= 3 && request.resource.data.text.size() <= 800 && request.resource.data.publicRequested is bool && request.resource.data.createdAt == request.time && !exists(/databases/$(database)/documents/questions/$(qid)) && getAfter(/databases/$(database)/documents/questions/$(qid)).data.text == request.resource.data.text && getAfter(/databases/$(database)/documents/questions/$(qid)).data.publicRequested == request.resource.data.publicRequested;
    allow update, delete: if false;
   }
  }
