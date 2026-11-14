@@ -10,9 +10,9 @@ service cloud.firestore {
    allow update, delete: if false;
   }
   match /questions/{qid} {
-   allow create: if signed() && request.resource.data.keys().hasOnly(['text','publicRequested','status','createdAt','answer','answeredAt','published']) && request.resource.data.text is string && request.resource.data.text.size() >= 3 && request.resource.data.text.size() <= 800 && request.resource.data.publicRequested is bool && request.resource.data.status == 'sent' && request.resource.data.answer == '' && request.resource.data.published == false && request.resource.data.createdAt == request.time && request.resource.data.answeredAt == null;
-   allow get: if admin() || (signed() && exists(/databases/$(database)/documents/users/$(request.auth.uid)/history/$(qid))) || (resource.data.published == true && resource.data.publicRequested == true && resource.data.status == 'answered');
-   allow list: if admin() || (resource.data.published == true && resource.data.publicRequested == true && resource.data.status == 'answered');
+   allow create: if signed() && request.resource.data.keys().hasOnly(['text','publicRequested','status','createdAt','answer','answeredAt','published']) && request.resource.data.text is string && request.resource.data.text.size() >= 3 && request.resource.data.text.size() <= 800 && request.resource.data.publicRequested is bool && request.resource.data.status == 'sent' && request.resource.data.answer == '' && request.resource.data.published == false && request.resource.data.createdAt == request.time && request.resource.data.answeredAt == null && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/history/$(qid)).data.questionId == qid && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/history/$(qid)).data.text == request.resource.data.text;
+   allow get: if admin() || (signed() && exists(/databases/$(database)/documents/users/$(request.auth.uid)/history/$(qid))) || resource.data.published == true;
+   allow list: if admin() || resource.data.published == true;
    allow update: if admin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','answer','answeredAt','published']) && request.resource.data.status in ['sent','read','answered'] && request.resource.data.answer is string && request.resource.data.answer.size() <= 2000 && (!request.resource.data.published || (resource.data.publicRequested && request.resource.data.status == 'answered' && request.resource.data.answer.size() > 0));
    allow delete: if admin();
   }
