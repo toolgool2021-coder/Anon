@@ -2,12 +2,19 @@ rules_version = '2';
 service cloud.firestore {
  match /databases/{database}/documents {
   function signed() { return request.auth != null; }
-  function verified() { return signed() && request.auth.token.email_verified == true; }
+  function maintenanceOpen() { return !exists(/databases/$(database)/documents/system/maintenance) || get(/databases/$(database)/documents/system/maintenance).data.enabled != true; }
+  function verified() { return signed() && request.auth.token.email_verified == true && (maintenanceOpen() || admin()); }
   function admin() { return signed() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
-  match /admins/{uid} { allow read: if signed() && request.auth.uid == uid; allow write: if false; }
+  match /system/maintenance {
+   allow get: if true;
+   allow list: if false;
+   allow create, update: if admin() && request.resource.data.keys().hasOnly(['enabled','reason','until','updatedAt']) && request.resource.data.enabled is bool && request.resource.data.reason is string && request.resource.data.reason.size() <= 240 && request.resource.data.until is string && request.resource.data.until.size() <= 100 && request.resource.data.updatedAt == request.time;
+   allow delete: if false;
+  }
+  match /admins/{uid} { allow read: if signed() && request.auth.uid == uid && (maintenanceOpen() || admin()); allow write: if false; }
   match /usernames/{name} {
    allow get: if signed(); allow list: if false;
-   allow create: if signed() && name.matches('^[a-z0-9_]{3,20}$') && request.resource.data.keys().hasOnly(['uid']) && request.resource.data.uid == request.auth.uid;
+   allow create: if signed() && (maintenanceOpen() || admin()) && name.matches('^[a-z0-9_]{3,20}$') && request.resource.data.keys().hasOnly(['uid']) && request.resource.data.uid == request.auth.uid;
    allow update, delete: if false;
   }
   match /questions/{qid} {
@@ -18,7 +25,7 @@ service cloud.firestore {
    allow delete: if admin();
   }
   match /users/{uid}/limits/{kind} {
-   allow get: if signed() && request.auth.uid == uid && kind == 'question';
+   allow get: if signed() && request.auth.uid == uid && kind == 'question' && (maintenanceOpen() || admin());
    allow list: if false;
    allow create, update: if verified() && request.auth.uid == uid && kind == 'question' && request.resource.data.keys().hasOnly(['lastSentAt']) && request.resource.data.lastSentAt == request.time && (!exists(/databases/$(database)/documents/users/$(uid)/limits/$(kind)) || resource.data.lastSentAt + duration.value(3, 'h') <= request.time);
    allow delete: if false;
